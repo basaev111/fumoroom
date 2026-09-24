@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>FUMOROOM — наличие в реальном времени</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700;800&family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1012;
+    --panel:#17181c;
+    --panel-2:#1e2024;
+    --violet:#9d5cff;
+    --violet-dim:rgba(157,92,255,0.16);
+    --blue:#3d8bff;
+    --blue-dim:rgba(61,139,255,0.16);
+    --pink:#ff4fd8;
+    --green:#39ff9d;
+    --amber:#ffb020;
+    --red:#ff6161;
+    --text:#ecedf0;
+    --mute:#888c93;
+    --border:rgba(255,255,255,0.09);
+    --radius:14px;
+    --radius-sm:8px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .display{font-family:'Unbounded','Inter',sans-serif;font-weight:700;letter-spacing:-0.01em;margin:0;}
+  .mono{font-family:'Manrope',sans-serif;}
+  a{color:inherit;}
+  .wrap{max-width:560px;margin:0 auto;padding:0 18px 120px;position:relative;}
+  .bg-tex{position:fixed;inset:0;z-index:-1;background:var(--bg);}
+  .bg-tex::before{
+    content:'';position:absolute;inset:0;
+    background-image:repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 3px);
+    opacity:0.4;
+  }
+  .bg-tex::after{
+    content:'';position:absolute;top:-10%;right:-10%;width:60%;height:40%;
+    background:radial-gradient(circle, rgba(61,139,255,0.12), transparent 65%);
+  }
+
+  /* ---------- Age gate ---------- */
+  .gate{
+    position:fixed;inset:0;z-index:100;
+    background:rgba(4,4,6,0.92);
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;transition:opacity .3s ease;
+  }
+  .gate.hidden{opacity:0;pointer-events:none;}
+  .gate-card{
+    max-width:340px;width:100%;
+    background:var(--panel);
+    border:1px solid var(--blue);
+    border-radius:var(--radius);
+    padding:28px 22px;text-align:center;
+  }
+  .gate-card .mark{font-size:1.3rem;color:var(--blue);margin-bottom:10px;letter-spacing:0.02em;}
+  .gate-card p{color:var(--mute);font-size:0.88rem;margin:8px 0 20px;}
+  .gate-actions{display:flex;gap:10px;}
+  .btn{
+    flex:1;border:none;border-radius:var(--radius-sm);padding:13px 14px;
+    font-family:'Inter',sans-serif;font-weight:600;font-size:0.9rem;cursor:pointer;
+  }
+  .btn-primary{background:var(--blue);color:#0f1012;}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--mute);}
+  .blocked{display:none;text-align:center;color:var(--mute);font-size:0.86rem;padding:16px 0;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    position:sticky;top:0;z-index:30;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;
+    background:rgba(15,16,18,0.9);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid transparent;
+  }
+  .topbar.scrolled{border-bottom-color:var(--border);}
+  .brand{display:flex;align-items:center;gap:8px;}
+  .brand-dot{width:7px;height:7px;background:var(--blue);box-shadow:0 0 8px var(--blue);animation:blink 1.4s steps(2) infinite;}
+  @keyframes blink{50%{opacity:0.2;}}
+  .brand-name{font-family:'Unbounded',sans-serif;font-size:0.88rem;font-weight:700;letter-spacing:0.02em;}
+  .topbar-right{display:flex;align-items:center;gap:8px;}
+  .lang-switch{display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+  .lang-switch button{
+    border:none;background:var(--panel);color:var(--mute);
+    font-family:'Manrope',sans-serif;font-size:0.72rem;font-weight:700;
+    padding:7px 10px;cursor:pointer;
+  }
+  .lang-switch button.active{background:var(--blue);color:#0f1012;}
+  .icon-btn{
+    position:relative;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius-sm);width:36px;height:36px;
+    display:flex;align-items:center;justify-content:center;font-size:1rem;cursor:pointer;
+  }
+  .cart-count{
+    position:absolute;top:-6px;right:-6px;background:var(--pink);color:#0f1012;
+    font-family:'Manrope',sans-serif;font-size:0.62rem;font-weight:700;
+    min-width:17px;height:17px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;padding:0 4px;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    min-height:100svh;display:flex;flex-direction:column;justify-content:center;
+    padding:0 18px;max-width:560px;margin:0 auto;
+  }
+  .hero-logo{font-size:clamp(1.6rem, 9vw, 2.3rem);display:flex;align-items:baseline;gap:4px;margin-bottom:14px;}
+  .cursor{display:inline-block;width:9px;height:1.4rem;background:var(--blue);animation:blink 1s steps(2) infinite;vertical-align:-3px;}
+  .hero-tag{color:var(--mute);font-size:0.95rem;max-width:300px;margin-bottom:34px;}
+  .board{border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);display:flex;overflow:hidden;}
+  .board-cell{flex:1;padding:16px 14px;text-align:left;border-right:1px dashed var(--border);}
+  .board-cell:last-child{border-right:none;}
+  .board-cell .num{font-family:'Manrope',sans-serif;font-size:1.5rem;font-weight:800;color:var(--blue);}
+  .board-cell:nth-child(2) .num{color:var(--violet);}
+  .board-cell:nth-child(3) .num{color:var(--pink);}
+  .board-cell .lbl{color:var(--mute);font-size:0.68rem;margin-top:4px;}
+  .scroll-hint{
+    margin-top:16px;color:var(--mute);font-family:'Manrope',sans-serif;font-size:0.72rem;font-weight:600;
+    display:flex;align-items:center;gap:6px;animation:bob 1.8s ease-in-out infinite;
+  }
+  @keyframes bob{50%{transform:translateY(5px);}}
+  .ref-entry{
+    margin-top:14px;width:100%;
+    background:var(--panel);border:1px dashed var(--violet);color:var(--violet);
+    font-family:'Inter',sans-serif;font-weight:700;font-size:0.85rem;
+    border-radius:var(--radius-sm);padding:13px;cursor:pointer;
+  }
+
+  /* ---------- Tabs ---------- */
+  .filters-sticky{
+    position:sticky;top:58px;z-index:20;
+    background:rgba(15,16,18,0.95);
+    margin:0 -18px 22px;padding:0 18px;
+    border-bottom:1px solid var(--border);
+  }
+  .filters{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;}
+  .filters::-webkit-scrollbar{display:none;}
+  .filter-tab{
+    flex:0 0 auto;border:none;background:transparent;color:var(--mute);
+    font-family:'Inter',sans-serif;font-weight:600;font-size:0.82rem;
+    padding:13px 14px;cursor:pointer;white-space:nowrap;
+    border-bottom:2px solid transparent;
+  }
+  .filter-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+  .search-row{display:flex;align-items:center;gap:8px;padding:10px 0 8px;}
+  .search-ic{color:var(--mute);font-size:0.95rem;}
+  .search-input{
+    flex:1;background:var(--panel);border:1px solid var(--border);
+    border-radius:var(--radius-sm);color:var(--text);
+    font-family:'Inter',sans-serif;font-size:0.85rem;
+    padding:9px 12px;outline:none;
+  }
+  .search-input::placeholder{color:var(--mute);}
+  .search-input:focus{border-color:var(--blue);}
+
+  .subfilters{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:10px;}
+  .sort-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .mini-chip{
+    border:1px solid var(--border);background:var(--panel);color:var(--mute);
+    font-family:'Manrope',sans-serif;font-size:0.7rem;font-weight:700;
+    padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;
+  }
+  .mini-chip.active{border-color:var(--blue);color:var(--blue);background:var(--blue-dim);}
+
+  /* ---------- Brand cards ---------- */
+  .manifest{display:flex;flex-direction:column;gap:12px;margin-bottom:22px;}
+  .brand-item{
+    border:1px solid var(--border);border-radius:var(--radius);
+    background:var(--panel);overflow:hidden;
+  }
+  .brand-item.open{border-color:rgba(61,139,255,0.4);}
+  .brand-header{display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer;}
+  .bh-thumb{
+    width:42px;height:42px;flex:0 0 auto;border-radius:var(--radius-sm);
+    border:1px dashed var(--border);
+    background:repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 6px, transparent 6px 12px);
+  }
+  .bh-left{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;}
+  .brand-header .bh-name{font-family:'Unbounded',sans-serif;font-size:0.85rem;font-weight:600;}
+  .bh-meta{font-family:'Manrope',sans-serif;font-size:0.66rem;font-weight:600;color:var(--mute);}
+  .bh-right{display:flex;align-items:center;gap:10px;flex:0 0 auto;}
+  .bh-count{font-family:'Manrope',sans-serif;color:var(--mute);font-size:0.78rem;font-weight:700;}
+  .bh-price{font-family:'Manrope',sans-serif;color:var(--blue);font-size:0.85rem;font-weight:800;white-space:nowrap;}
+  .bh-chevron{font-family:'Manrope',sans-serif;color:var(--violet);font-size:0.85rem;transition:transform .2s ease;}
+  .brand-item.open .bh-chevron{transform:rotate(90deg);}
+  .brand-body{max-height:0;overflow:hidden;transition:max-height .3s ease;}
+  .brand-item.open .brand-body{max-height:1600px;border-top:1px solid var(--border);}
+  .flavor-row{display:flex;align-items:center;gap:10px;padding:11px 14px;}
+  .flavor-row + .flavor-row{border-top:1px dashed var(--border);}
+  .flavor-row.out{opacity:0.55;}
+  .flavor-row .fr-info{flex:1;min-width:0;}
+  .flavor-row .fr-name{font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;}
+  .badge-hit{
+    font-family:'Manrope',sans-serif;font-size:0.6rem;font-weight:800;
+    color:var(--violet);background:var(--violet-dim);
+    padding:2px 6px;border-radius:5px;letter-spacing:0.02em;
+  }
+  .heart-btn{
+    background:none;border:none;font-size:1rem;color:var(--mute);cursor:pointer;
+    line-height:1;padding:2px;flex:0 0 auto;
+  }
+  .heart-btn.active{color:var(--pink);}
+  .flavor-row .fr-meta{font-family:'Manrope',sans-serif;font-size:0.66rem;font-weight:600;color:var(--green);margin-top:2px;}
+  .flavor-row.low .fr-meta{color:var(--amber);}
+  .flavor-row.out .fr-meta{color:var(--red);}
+  .flavor-row .fr-price{font-family:'Manrope',sans-serif;font-size:0.82rem;font-weight:700;color:var(--blue);white-space:nowrap;}
+  .qty-btn{
+    width:24px;height:24px;border-radius:6px;border:1px solid var(--border);
+    background:var(--panel-2);color:var(--violet);font-size:0.95rem;font-weight:700;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;
+  }
+  .qty-control{display:flex;align-items:center;gap:6px;}
+  .qty-num{font-family:'Manrope',sans-serif;font-size:0.82rem;font-weight:700;min-width:12px;text-align:center;}
+  .oos-label{font-family:'Manrope',sans-serif;font-size:0.68rem;font-weight:700;color:var(--red);white-space:nowrap;}
+
+  .pod-color-wrap{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+  .pod-color-picker{display:flex;align-items:center;gap:6px;}
+  .pod-color-select{
+    background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    font-family:'Inter',sans-serif;font-size:0.76rem;border-radius:6px;padding:6px 8px;
+    max-width:120px;
+  }
+  .pod-color-line{display:flex;align-items:center;gap:8px;}
+  .pod-color-name{font-size:0.74rem;color:var(--mute);}
+  .manifest .empty{text-align:center;color:var(--mute);font-size:0.85rem;padding:30px 0;}
+
+  /* ---------- Compact delivery/payment info ---------- */
+  .info-strip{display:flex;gap:10px;margin-bottom:24px;}
+  .info-tile{
+    flex:1;border:1px solid var(--border);border-radius:var(--radius);
+    background:var(--panel);padding:13px 14px;
+  }
+  .info-tile .it-label{color:var(--mute);font-size:0.68rem;margin-bottom:6px;}
+  .info-tile .it-value{font-size:0.8rem;line-height:1.4;}
+
+  /* ---------- Reviews ---------- */
+  .reviews-link{
+    display:flex;align-items:center;justify-content:space-between;
+    border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:26px;text-decoration:none;color:var(--text);font-size:0.85rem;
+    background:var(--panel);
+  }
+  .reviews-link .stars{color:var(--blue);font-family:'Manrope',sans-serif;}
+  .age-note{text-align:center;color:var(--mute);font-size:0.7rem;padding-bottom:6px;}
+
+  /* ---------- Sticky CTA ---------- */
+  .sticky-cta{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    display:flex;justify-content:center;gap:10px;
+    padding:12px 18px calc(12px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg, transparent, rgba(15,16,18,0.92) 35%, var(--bg) 75%);
+  }
+  .sticky-cta a, .sticky-cta button{
+    flex:1;max-width:260px;
+    display:flex;align-items:center;justify-content:center;gap:7px;
+    text-decoration:none;font-family:'Inter',sans-serif;font-weight:700;font-size:0.86rem;
+    border-radius:var(--radius-sm);padding:14px;border:none;cursor:pointer;
+  }
+  .sticky-cta a{background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
+  .sticky-cta button{background:var(--blue);color:#0f1012;}
+
+  /* ---------- Cart / Admin drawer (shared receipt style) ---------- */
+  .drawer-overlay{
+    position:fixed;inset:0;z-index:90;background:rgba(4,4,6,0.6);
+    opacity:0;pointer-events:none;transition:opacity .25s ease;
+  }
+  .drawer-overlay.open{opacity:1;pointer-events:auto;}
+  .drawer{
+    position:fixed;left:0;right:0;bottom:0;z-index:91;
+    max-width:560px;margin:0 auto;
+    background:var(--panel);
+    border-radius:18px 18px 0 0;
+    border-top:1px solid var(--border);
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    transform:translateY(100%);transition:transform .3s ease;
+    max-height:85vh;display:flex;flex-direction:column;
+  }
+  .drawer.open{transform:translateY(0);}
+  .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .drawer-header h3{font-family:'Unbounded',sans-serif;font-size:0.95rem;}
+  .drawer-close{background:none;border:none;font-size:1.1rem;color:var(--mute);cursor:pointer;}
+  .drawer-scroll{overflow-y:auto;flex:1;}
+
+  .cart-item{
+    display:flex;align-items:center;gap:10px;padding:9px 0;
+    border-bottom:1px dashed var(--border);
+  }
+  .cart-item .ci-info{flex:1;min-width:0;font-family:'Inter',sans-serif;}
+  .cart-item .ci-name{font-size:0.84rem;}
+  .cart-item .ci-brand{font-size:0.68rem;color:var(--mute);}
+  .cart-item .ci-price{font-family:'Manrope',sans-serif;font-size:0.82rem;font-weight:700;color:var(--blue);white-space:nowrap;}
+  .cart-empty{text-align:center;color:var(--mute);font-size:0.85rem;padding:26px 0;}
+
+  .option-group{margin-top:16px;}
+  .option-label{color:var(--mute);font-size:0.74rem;margin-bottom:8px;}
+  .option-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .option-chip{
+    border:1px solid var(--border);background:var(--panel-2);color:var(--mute);
+    font-family:'Inter',sans-serif;font-size:0.8rem;font-weight:600;
+    padding:8px 13px;border-radius:var(--radius-sm);cursor:pointer;
+  }
+  .option-chip.active{border-color:var(--blue);color:var(--blue);background:var(--blue-dim);}
+
+  .cart-total{
+    display:flex;justify-content:space-between;align-items:center;
+    padding-top:14px;margin-top:14px;border-top:1px dashed var(--border);
+    font-family:'Manrope',sans-serif;font-weight:800;font-size:1rem;
+  }
+  .cart-checkout{
+    display:block;text-align:center;margin-top:14px;
+    background:var(--blue);color:#0f1012;border:none;border-radius:var(--radius-sm);
+    padding:14px;font-family:'Inter',sans-serif;font-weight:700;font-size:0.9rem;
+    text-decoration:none;cursor:pointer;
+  }
+
+  /* ---------- Admin panel ---------- */
+  .admin-note{color:var(--mute);font-size:0.76rem;margin-bottom:14px;line-height:1.5;}
+  .admin-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px;}
+  .admin-tab{
+    flex:1;border:none;background:transparent;color:var(--mute);
+    font-family:'Inter',sans-serif;font-weight:600;font-size:0.82rem;
+    padding:10px;cursor:pointer;border-bottom:2px solid transparent;
+  }
+  .admin-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .admin-group-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .admin-del-brand{background:none;border:none;color:var(--red);font-size:0.72rem;cursor:pointer;font-weight:600;}
+  .admin-row{
+    border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:12px;margin-bottom:10px;background:var(--panel-2);
+  }
+  .admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+  .admin-grid.full{grid-template-columns:1fr;}
+  .admin-field label{display:block;color:var(--mute);font-size:0.64rem;margin-bottom:3px;}
+  .admin-field input, .admin-field select{
+    width:100%;background:var(--panel);border:1px solid var(--border);
+    border-radius:6px;color:var(--text);font-family:'Inter',sans-serif;font-size:0.8rem;
+    padding:7px 8px;outline:none;
+  }
+  .admin-field input:focus, .admin-field select:focus{border-color:var(--blue);}
+  .admin-row-foot{display:flex;align-items:center;justify-content:space-between;margin-top:4px;}
+  .admin-check{display:flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--mute);}
+  .admin-del{background:none;border:none;color:var(--red);font-size:0.76rem;cursor:pointer;font-weight:600;}
+  .admin-add{
+    width:100%;border:1px dashed var(--border);background:transparent;color:var(--mute);
+    border-radius:var(--radius-sm);padding:12px;font-family:'Inter',sans-serif;font-weight:600;
+    font-size:0.85rem;cursor:pointer;margin-bottom:14px;
+  }
+  .admin-save{
+    display:block;width:100%;text-align:center;margin-top:4px;
+    background:var(--blue);color:#0f1012;border:none;border-radius:var(--radius-sm);
+    padding:14px;font-family:'Inter',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;
+  }
+  .admin-save:disabled{opacity:0.6;cursor:default;}
+  .admin-status{text-align:center;font-size:0.78rem;color:var(--mute);margin-top:10px;min-height:1em;}
+
+  /* ---------- Referral ---------- */
+  .ref-note{color:var(--mute);font-size:0.82rem;line-height:1.5;margin-bottom:16px;}
+  .ref-code-box{
+    border:1px dashed var(--violet);border-radius:var(--radius);
+    background:var(--violet-dim);padding:18px;text-align:center;margin-bottom:16px;
+  }
+  .ref-code-box .code{font-family:'Manrope',sans-serif;font-size:1.4rem;font-weight:800;color:var(--violet);letter-spacing:0.05em;}
+  .ref-code-box .code-label{color:var(--mute);font-size:0.7rem;margin-top:4px;}
+  .ref-actions{display:flex;gap:10px;margin-bottom:6px;}
+  .ref-actions button{flex:1;}
+  .ref-copy-status{text-align:center;font-size:0.76rem;color:var(--green);min-height:1em;margin-top:6px;}
+  .ref-field-wrap{margin-top:14px;}
+  .ref-field-wrap label{display:block;color:var(--mute);font-size:0.74rem;margin-bottom:6px;}
+  .ref-field-wrap input{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:var(--radius-sm);color:var(--text);font-family:'Inter',sans-serif;font-size:0.85rem;
+    padding:10px 12px;outline:none;
+  }
+  .ref-field-wrap input:focus{border-color:var(--violet);}
+
+  @media (prefers-reduced-motion:reduce){
+    .brand-dot,.cursor,.scroll-hint{animation:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-tex"></div>
+
+<div class="gate" id="gate">
+  <div class="gate-card" id="gateCard">
+    <div class="mark mono">FUMOROOM_</div>
+    <p data-i18n="gateText">Продажа товаров только совершеннолетним. Подтвердите, что вам есть 18 лет.</p>
+    <div class="gate-actions">
+      <button class="btn btn-ghost" id="gateNo" data-i18n="gateNo">Мне нет 18</button>
+      <button class="btn btn-primary" id="gateYes" data-i18n="gateYes">Мне есть 18</button>
+    </div>
+    <div class="blocked" id="blockedMsg" data-i18n="blockedMsg">Доступ ограничен: контент предназначен только для совершеннолетних.</div>
+  </div>
+</div>
+
+<div class="topbar" id="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span class="brand-name">FUMOROOM</span>
+  </div>
+  <div class="topbar-right">
+    <div class="lang-switch">
+      <button class="active" data-lang="ru">RU</button>
+      <button data-lang="ua">UA</button>
+    </div>
+    <button class="icon-btn" id="favBtn">
+      ♡
+      <span class="cart-count" id="favCount" style="display:none;">0</span>
+    </button>
+    <button class="icon-btn" id="cartBtn">
+      🧾
+      <span class="cart-count" id="cartCount" style="display:none;">0</span>
+    </button>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-logo display">FUMOROOM<span class="cursor"></span></div>
+  <div class="hero-tag" data-i18n="heroTagline">Склад в реальном времени. Смотри, что есть сейчас — заказывай прямо в Telegram.</div>
+  <div class="board">
+    <div class="board-cell"><div class="num" id="statFlavors">0</div><div class="lbl" data-i18n="statFlavors">вкусов</div></div>
+    <div class="board-cell"><div class="num" id="statItems">0</div><div class="lbl" data-i18n="statItems">товаров</div></div>
+    <div class="board-cell"><div class="num" id="statBrands">0</div><div class="lbl" data-i18n="statBrands">брендов</div></div>
+  </div>
+  <button class="ref-entry" id="refBtn" data-i18n="refEntry">Приведи друга, получи бонус</button>
+  <div class="scroll-hint"><span data-i18n="scrollHint">листай вниз</span><span>˅</span></div>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none;">
+  <div class="filters-sticky">
+    <div class="filters" id="filters"></div>
+    <div class="search-row">
+      <span class="search-ic">⌕</span>
+      <input type="text" id="searchInput" class="search-input" placeholder="Поиск по названию…">
+    </div>
+    <div class="subfilters">
+      <div class="sort-row" id="sortRow"></div>
+    </div>
+  </div>
+
+  <div class="manifest" id="brandList"></div>
+
+  <div class="info-strip">
+    <div class="info-tile">
+      <div class="it-label" data-i18n="infoDeliveryLabel">Получение</div>
+      <div class="it-value" id="infoDeliveryText">Курьером по городу или самовывоз.</div>
+    </div>
+    <div class="info-tile">
+      <div class="it-label" data-i18n="infoPaymentLabel">Оплата</div>
+      <div class="it-value" id="infoPaymentText">Наличные, карта, онлайн-перевод</div>
+    </div>
+  </div>
+
+  <a class="reviews-link" href="#" id="reviewsLink">
+    <span data-i18n="reviewsText">Отзывы</span>
+    <span class="stars">★★★★★</span>
+  </a>
+
+  <p class="age-note" data-i18n="ageNote">Продажа только совершеннолетним.</p>
+</div>
+
+<div class="wrap" id="loadingWrap">
+  <div style="min-height:40vh;display:flex;align-items:center;justify-content:center;color:var(--mute);font-family:'Manrope',sans-serif;" id="loadingText">
+    Загружаем наличие…
+  </div>
+</div>
+
+<div class="sticky-cta" id="stickyCta" style="display:none;">
+  <a id="mainTgLink" href="#" target="_blank" rel="noopener">💬 <span data-i18n="ctaText">В лс</span></a>
+  <button id="openCartBtn">🧾 <span data-i18n="cartCta">Корзина</span></button>
+</div>
+
+<div class="drawer-overlay" id="cartOverlay"></div>
+<div class="drawer" id="cartDrawer">
+  <div class="drawer-header">
+    <h3 data-i18n="cartHead">Заказ</h3>
+    <button class="drawer-close" id="cartClose">✕</button>
+  </div>
+  <div class="drawer-scroll">
+    <div id="cartItems"></div>
+    <div class="ref-field-wrap">
+      <label data-i18n="refFieldLabel">Код друга (если есть)</label>
+      <input type="text" id="refCodeInput" placeholder="FUM-XXXX">
+    </div>
+    <div class="option-group" id="deliveryGroup" style="display:none;">
+      <div class="option-label" data-i18n="deliveryLabel">Способ получения</div>
+      <div class="option-row" id="deliveryOptions"></div>
+    </div>
+    <div class="option-group" id="paymentGroup" style="display:none;">
+      <div class="option-label" data-i18n="paymentLabel">Способ оплаты</div>
+      <div class="option-row" id="paymentOptions"></div>
+    </div>
+    <div class="cart-total" id="cartTotal" style="display:none; flex-direction:column; gap:6px;">
+      <div style="display:flex;justify-content:space-between;font-family:'Inter',sans-serif;font-weight:500;font-size:0.82rem;color:var(--mute);">
+        <span data-i18n="subtotalLabel">Товары</span>
+        <span id="cartSubtotalValue" class="mono">0 zł</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-family:'Inter',sans-serif;font-weight:500;font-size:0.82rem;color:var(--mute);">
+        <span data-i18n="deliveryFeeLabel">Доставка</span>
+        <span id="cartDeliveryFeeValue" class="mono">0 zł</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);">
+        <span data-i18n="cartTotalLabel">Итого</span>
+        <span id="cartTotalValue">0 zł</span>
+      </div>
+    </div>
+  </div>
+  <a class="cart-checkout" id="cartCheckout" href="#" target="_blank" rel="noopener" style="display:none;" data-i18n="cartCheckout">Отправить заказ в Telegram</a>
+</div>
+
+<div class="drawer-overlay" id="refOverlay"></div>
+<div class="drawer" id="refDrawer">
+  <div class="drawer-header">
+    <h3 data-i18n="refHead">Приведи друга</h3>
+    <button class="drawer-close" id="refClose">✕</button>
+  </div>
+  <div class="drawer-scroll">
+    <div class="ref-note" data-i18n="refNote">Поделитесь своим кодом с другом. По коду у него будет скидка 20% на первый заказ, а вам — 20% на следующий.</div>
+    <div class="ref-code-box">
+      <div class="code" id="refCode">FUM-0000</div>
+      <div class="code-label" data-i18n="refCodeLabel">Ваш персональный код</div>
+    </div>
+    <div class="ref-actions">
+      <button class="btn btn-ghost" id="refCopy" data-i18n="refCopy">Скопировать код</button>
+      <button class="btn btn-primary" id="refShare" data-i18n="refShare">Поделиться</button>
+    </div>
+    <div class="ref-copy-status" id="refCopyStatus"></div>
+  </div>
+</div>
+
+<div class="drawer-overlay" id="favOverlay"></div>
+<div class="drawer" id="favDrawer">
+  <div class="drawer-header">
+    <h3 data-i18n="favHead">Избранное</h3>
+    <button class="drawer-close" id="favClose">✕</button>
+  </div>
+  <div class="drawer-scroll" id="favItems"></div>
+</div>
+
+<script>
+(function(){
+
+  // Адрес Apps Script теперь НЕ хранится здесь — сайт обращается к своей же
+  // serverless-функции /api/status, которая сама дёргает Apps Script со стороны
+  // сервера (см. файл api/status.js и переменную окружения FUMOROOM_API_URL в Vercel).
+  const API_URL = "/api/status";
+
+  const categories = [
+    {key:"all", ru:"Всё", ua:"Все"},
+    {key:"disposables", ru:"Одноразки", ua:"Одноразки"},
+    {key:"liquids", ru:"Жидкости", ua:"Рідини"},
+    {key:"pods", ru:"Поды", ua:"Поди"},
+    {key:"cartridges", ru:"Картриджи", ua:"Картриджі"}
+  ];
+
+  const deliveryMethods = [
+    {key:"courier", ru:"Курьером", ua:"Кур'єром", get fee(){ return settings.courierFee || 0; }, get freeFrom(){ return settings.courierFreeFrom || null; }},
+    {key:"pickup", ru:"Самовывоз", ua:"Самовивіз", fee:0, freeFrom:null}
+  ];
+  const paymentMethods = [
+    {key:"cash", ru:"Наличные", ua:"Готівка"},
+    {key:"card", ru:"Карта", ua:"Картка"},
+    {key:"online", ru:"Онлайн-перевод", ua:"Онлайн-переказ"}
+  ];
+
+  const i18n = {
+    ru:{
+      gateText:"Продажа товаров только совершеннолетним. Подтвердите, что вам есть 18 лет.",
+      gateNo:"Мне нет 18", gateYes:"Мне есть 18",
+      blockedMsg:"Доступ ограничен: контент предназначен только для совершеннолетних.",
+      heroTagline:"Склад в реальном времени. Смотри, что есть сейчас — заказывай прямо в Telegram.",
+      scrollHint:"листай вниз",
+      statFlavors:"вкусов", statItems:"товаров", statBrands:"брендов",
+      infoDeliveryLabel:"Получение", infoPaymentLabel:"Оплата",
+      reviewsText:"Отзывы", ageNote:"Продажа только совершеннолетним.",
+      ctaText:"В лс", cartCta:"Корзина",
+      inStock:"в наличии", outStock:"нету в наличии", lowStock:"осталось мало",
+      bestsellerLabel:"Хит",
+      favHead:"Избранное", favEmpty:"Пока ничего не добавлено",
+      empty:"Ничего не найдено в этой категории",
+      cartHead:"Заказ", cartTotalLabel:"Итого", cartCheckout:"Отправить заказ в Telegram",
+      cartEmpty:"Пока пусто", deliveryLabel:"Способ получения", paymentLabel:"Способ оплаты",
+      subtotalLabel:"Товары", deliveryFeeLabel:"Доставка", freeLabel:"Бесплатно",
+      searchPh:"Поиск по названию…", chooseColor:"Выберите цвет",
+      sortName:"Название", sortStrength:"Крепость", sortPrice:"Цена",
+      refEntry:"Приведи друга, получи бонус", refHead:"Приведи друга",
+      refNote:"Поделитесь своим кодом с другом. По коду у него будет скидка 20% на первый заказ, а вам — 20% на следующий.",
+      refCodeLabel:"Ваш персональный код", refCopy:"Скопировать код", refShare:"Поделиться",
+      refCopied:"Код скопирован!", refFieldLabel:"Код друга (если есть)",
+      refShareText:"Держи 20% скидку в FUMOROOM по моему коду"
+    },
+    ua:{
+      gateText:"Продаж товарів лише повнолітнім. Підтвердьте, що вам є 18 років.",
+      gateNo:"Мені немає 18", gateYes:"Мені є 18",
+      blockedMsg:"Доступ обмежено: контент лише для повнолітніх.",
+      heroTagline:"Склад у реальному часі. Дивись, що є зараз — замовляй прямо в Telegram.",
+      scrollHint:"гортай вниз",
+      statFlavors:"смаків", statItems:"товарів", statBrands:"брендів",
+      infoDeliveryLabel:"Отримання", infoPaymentLabel:"Оплата",
+      reviewsText:"Відгуки", ageNote:"Продаж лише повнолітнім.",
+      ctaText:"В лс", cartCta:"Кошик",
+      inStock:"в наявності", outStock:"немає в наявності", lowStock:"мало залишилось",
+      bestsellerLabel:"Хіт",
+      favHead:"Обране", favEmpty:"Поки нічого не додано",
+      empty:"Нічого не знайдено в цій категорії",
+      cartHead:"Замовлення", cartTotalLabel:"Разом", cartCheckout:"Надіслати замовлення в Telegram",
+      cartEmpty:"Поки порожньо", deliveryLabel:"Спосіб отримання", paymentLabel:"Спосіб оплати",
+      subtotalLabel:"Товари", deliveryFeeLabel:"Доставка", freeLabel:"Безкоштовно",
+      searchPh:"Пошук за назвою…", chooseColor:"Оберіть колір",
+      sortName:"Назва", sortStrength:"Міцність", sortPrice:"Ціна",
+      refEntry:"Приведи друга, отримай бонус", refHead:"Приведи друга",
+      refNote:"Поділіться своїм кодом із другом. За кодом у нього буде знижка 20% на перше замовлення, а вам — 20% на наступне.",
+      refCodeLabel:"Ваш персональний код", refCopy:"Скопіювати код", refShare:"Поділитися",
+      refCopied:"Код скопійовано!", refFieldLabel:"Код друга (якщо є)",
+      refShareText:"Тримай знижку 20% у FUMOROOM за моїм кодом"
+    }
+  };
+
+  let lang = "ru";
+  let activeCat = "all";
+  let expanded = new Set();
+  let cart = {};
+  let selectedDelivery = "courier";
+  let selectedPayment = "cash";
+  let searchQuery = "";
+  let sortKey = "name";
+  let sortDir = 1;
+  let products = [];
+  let settings = {};
+
+  function t(key){ return i18n[lang][key] || key; }
+
+  function makeCartKey(id, color){ return color ? id + "::" + color : id; }
+  function parseCartKey(key){
+    const idx = key.indexOf("::");
+    if(idx === -1) return {id:key, color:null};
+    return {id:key.slice(0,idx), color:key.slice(idx+2)};
+  }
+
+  // ---------- boot: fetch from backend ----------
+  async function boot(){
+    try{
+      const res = await fetch(API_URL);
+      const json = await res.json();
+      if(!json.ok || !json.data) throw new Error("bad_response");
+      products = json.data.products || [];
+      settings = json.data.settings || {};
+      document.getElementById("loadingWrap").style.display = "none";
+      document.getElementById("mainWrap").style.display = "block";
+      document.getElementById("stickyCta").style.display = "flex";
+      applyLang();
+    }catch(e){
+      document.getElementById("loadingText").textContent =
+        "Не удалось загрузить наличие. Обновите страницу или напишите нам в Telegram.";
+    }
+  }
+
+  function applyLang(){
+    const dict = i18n[lang];
+    document.querySelectorAll("[data-i18n]").forEach(el=>{
+      const key = el.getAttribute("data-i18n");
+      if(dict[key]) el.textContent = dict[key];
+    });
+    document.querySelectorAll(".lang-switch button").forEach(b=>{
+      b.classList.toggle("active", b.dataset.lang === lang);
+    });
+    document.getElementById("searchInput").placeholder = t("searchPh");
+    document.getElementById("infoDeliveryText").textContent = (settings.infoDeliveryValue && settings.infoDeliveryValue[lang]) || "";
+    document.getElementById("infoPaymentText").textContent = (settings.infoPaymentValue && settings.infoPaymentValue[lang]) || "";
+    document.getElementById("mainTgLink").href = settings.telegramLink || "#";
+    renderFilters();
+    renderSortRow();
+    renderBrandList();
+    renderCart();
+  }
+
+  document.querySelectorAll(".lang-switch button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{ lang = btn.dataset.lang; applyLang(); });
+  });
+
+  function animateCount(el, target, duration){
+    const start = performance.now();
+    function step(now){
+      const p = Math.min(1, (now-start)/duration);
+      el.textContent = Math.round(p * target);
+      if(p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  window.addEventListener("scroll", ()=>{
+    document.getElementById("topbar").classList.toggle("scrolled", window.scrollY > 10);
+  });
+
+  function renderFilters(){
+    const el = document.getElementById("filters");
+    el.innerHTML = "";
+    categories.forEach(c=>{
+      const b = document.createElement("button");
+      b.className = "filter-tab" + (c.key === activeCat ? " active" : "");
+      b.textContent = c[lang];
+      b.addEventListener("click", ()=>{ activeCat = c.key; expanded.clear(); renderFilters(); renderBrandList(); });
+      el.appendChild(b);
+    });
+  }
+
+  function renderSortRow(){
+    const el = document.getElementById("sortRow");
+    el.innerHTML = "";
+    const defs = [
+      {key:"name", label:t("sortName")},
+      {key:"mg", label:t("sortStrength")},
+      {key:"price", label:t("sortPrice")}
+    ];
+    defs.forEach(o=>{
+      const isActive = sortKey === o.key;
+      const chip = document.createElement("button");
+      chip.className = "mini-chip" + (isActive ? " active" : "");
+      chip.textContent = o.label + (isActive ? (sortDir===1 ? " ↑" : " ↓") : "");
+      chip.addEventListener("click", ()=>{
+        if(sortKey === o.key) sortDir *= -1;
+        else { sortKey = o.key; sortDir = 1; }
+        renderSortRow();
+        renderBrandList();
+      });
+      el.appendChild(chip);
+    });
+  }
+
+  document.getElementById("searchInput").addEventListener("input", (e)=>{
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderBrandList();
+  });
+
+  function isFavorite(id){
+    try{ return (JSON.parse(localStorage.getItem("fumoroom_favorites")||"[]")).includes(id); }
+    catch(e){ return false; }
+  }
+  function toggleFavorite(id){
+    try{
+      let favs = JSON.parse(localStorage.getItem("fumoroom_favorites")||"[]");
+      favs = favs.includes(id) ? favs.filter(x=>x!==id) : [...favs, id];
+      localStorage.setItem("fumoroom_favorites", JSON.stringify(favs));
+      updateFavCount();
+    }catch(e){}
+  }
+  function updateFavCount(){
+    try{
+      const n = (JSON.parse(localStorage.getItem("fumoroom_favorites")||"[]")).length;
+      const el = document.getElementById("favCount");
+      el.textContent = n; el.style.display = n>0 ? "flex" : "none";
+    }catch(e){}
+  }
+
+  function qtyControlHTML(p){
+    if(p.status === "out"){
+      return `<span class="oos-label">${t("outStock")}</span>`;
+    }
+    const qty = cart[p.id] || 0;
+    if(qty === 0) return `<button class="qty-btn" data-add="${p.id}">+</button>`;
+    return `
+      <div class="qty-control">
+        <button class="qty-btn" data-sub="${p.id}">–</button>
+        <span class="qty-num">${qty}</span>
+        <button class="qty-btn" data-add="${p.id}">+</button>
+      </div>`;
+  }
+
+  function podColorLinesHTML(p){
+    const availableColors = p.colors || [];
+    const addedColors = Object.keys(cart).map(k=>parseCartKey(k)).filter(x=>x.id===p.id && x.color);
+
+    const pickerHtml = availableColors.length ? `
+      <div class="pod-color-picker" data-podid="${p.id}">
+        <select class="pod-color-select" data-podcolorselect="${p.id}">
+          <option value="">${t("chooseColor")}</option>
+          ${availableColors.filter(c=>!cart[makeCartKey(p.id,c.name)]).map(c=>`<option value="${c.name}">${c.name}</option>`).join("")}
+        </select>
+        <button class="qty-btn" data-podcoloradd="${p.id}">+</button>
+      </div>` : "";
+
+    const addedHtml = addedColors.map(({color})=>{
+      const key = makeCartKey(p.id, color);
+      const qty = cart[key] || 0;
+      return `
+        <div class="pod-color-line">
+          <span class="pod-color-name">${color}</span>
+          <div class="qty-control">
+            <button class="qty-btn" data-sub="${key}">–</button>
+            <span class="qty-num">${qty}</span>
+            <button class="qty-btn" data-add="${key}">+</button>
+          </div>
+        </div>`;
+    }).join("");
+
+    return `<div class="pod-color-wrap">${pickerHtml}${addedHtml}</div>`;
+  }
+
+  function renderBrandList(){
+    const el = document.getElementById("brandList");
+    el.innerHTML = "";
+    let filtered = activeCat === "all" ? products.slice() : products.filter(p=>p.cat===activeCat);
+
+    if(searchQuery){
+      filtered = filtered.filter(p=>
+        p.name.toLowerCase().includes(searchQuery) || p.brand.toLowerCase().includes(searchQuery)
+      );
+    }
+
+    if(filtered.length === 0){
+      el.innerHTML = `<div class="empty">${t("empty")}</div>`;
+      animateCount(document.getElementById("statFlavors"), products.length, 900);
+      animateCount(document.getElementById("statItems"), products.length, 900);
+      animateCount(document.getElementById("statBrands"), new Set(products.map(p=>p.brand)).size, 900);
+      return;
+    }
+
+    const byBrand = {};
+    filtered.forEach(p=>{ (byBrand[p.brand] = byBrand[p.brand]||[]).push(p); });
+
+    let brandKeys = Object.keys(byBrand);
+    brandKeys.sort((a,b)=>{
+      if(sortKey === "name") return sortDir * a.localeCompare(b, "ru");
+      if(sortKey === "mg"){
+        const va = Math.min(...byBrand[a].map(p=>p.mg||0));
+        const vb = Math.min(...byBrand[b].map(p=>p.mg||0));
+        return sortDir * (va - vb);
+      }
+      const va = Math.min(...byBrand[a].map(p=>p.effectivePrice));
+      const vb = Math.min(...byBrand[b].map(p=>p.effectivePrice));
+      return sortDir * (va - vb);
+    });
+
+    const forceOpen = searchQuery.length > 0;
+
+    brandKeys.forEach(brand=>{
+      const items = byBrand[brand];
+      const isOpen = forceOpen || expanded.has(brand);
+      const prices = items.map(p=>p.effectivePrice);
+      const uniformPrice = prices.every(p=>p===prices[0]) ? prices[0] : null;
+      const priceLabel = uniformPrice !== null ? `${uniformPrice} zł` : `от ${Math.min(...prices)} zł`;
+      const meta = items[0].mg ? `${items[0].mg}mg · ${items[0].ml}ml` : "";
+
+      const item = document.createElement("div");
+      item.className = "brand-item" + (isOpen ? " open" : "");
+      item.innerHTML = `
+        <div class="brand-header">
+          <div class="bh-thumb"></div>
+          <div class="bh-left">
+            <span class="bh-name">${brand}</span>
+            ${meta ? `<span class="bh-meta">${meta}</span>` : ""}
+          </div>
+          <div class="bh-right">
+            <span class="bh-price">${priceLabel}</span>
+            <span class="bh-count">${items.length}</span>
+            <span class="bh-chevron">›</span>
+          </div>
+        </div>
+        <div class="brand-body">
+          ${items.map(p=>{
+            const hasDiscount = p.effectivePrice !== p.price;
+            const priceHtml = hasDiscount
+              ? `<span class="fr-price"><s style="color:var(--mute);font-weight:400;">${p.price} zł</s> ${p.effectivePrice} zł</span>`
+              : `<span class="fr-price">${p.effectivePrice} zł</span>`;
+            return `
+            <div class="flavor-row${p.status === "out" ? " out" : (p.status === "low" ? " low" : "")}">
+              <div class="fr-info">
+                <div class="fr-name">${p.name}${p.bestseller ? `<span class="badge-hit">${t("bestsellerLabel")}</span>` : ""}</div>
+                <div class="fr-meta">${p.status === "out" ? t("outStock") : (p.status === "low" ? t("lowStock") : t("inStock"))}</div>
+              </div>
+              ${uniformPrice === null && p.status !== "out" ? priceHtml : ""}
+              <button class="heart-btn${isFavorite(p.id) ? " active" : ""}" data-fav="${p.id}">${isFavorite(p.id) ? "♥" : "♡"}</button>
+              ${p.cat === "pods" ? podColorLinesHTML(p) : qtyControlHTML(p)}
+            </div>
+          `;}).join("")}
+        </div>
+      `;
+      item.querySelector(".brand-header").addEventListener("click", ()=>{
+        if(forceOpen) return;
+        expanded.has(brand) ? expanded.delete(brand) : expanded.add(brand);
+        renderBrandList();
+      });
+      el.appendChild(item);
+    });
+
+    el.querySelectorAll("[data-fav]").forEach(btn=>{
+      btn.addEventListener("click",(e)=>{
+        e.stopPropagation();
+        toggleFavorite(btn.getAttribute("data-fav"));
+        renderBrandList();
+      });
+    });
+    el.querySelectorAll("[data-add]").forEach(btn=>{
+      btn.addEventListener("click",(e)=>{
+        e.stopPropagation();
+        const id = btn.getAttribute("data-add");
+        cart[id] = (cart[id]||0)+1;
+        renderBrandList(); renderCart();
+      });
+    });
+    el.querySelectorAll("[data-podcoloradd]").forEach(btn=>{
+      btn.addEventListener("click",(e)=>{
+        e.stopPropagation();
+        const podId = btn.getAttribute("data-podcoloradd");
+        const select = el.querySelector(`[data-podcolorselect="${podId}"]`);
+        const color = select ? select.value : "";
+        if(!color) return;
+        const key = makeCartKey(podId, color);
+        cart[key] = (cart[key]||0)+1;
+        renderBrandList(); renderCart();
+      });
+    });
+    el.querySelectorAll("[data-sub]").forEach(btn=>{
+      btn.addEventListener("click",(e)=>{
+        e.stopPropagation();
+        const id = btn.getAttribute("data-sub");
+        if(cart[id]){ cart[id]--; if(cart[id]<=0) delete cart[id]; }
+        renderBrandList(); renderCart();
+      });
+    });
+
+    animateCount(document.getElementById("statFlavors"), products.length, 900);
+    animateCount(document.getElementById("statItems"), products.length, 900);
+    animateCount(document.getElementById("statBrands"), new Set(products.map(p=>p.brand)).size, 900);
+  }
+
+  function cartCount(){ return Object.values(cart).reduce((a,b)=>a+b,0); }
+  function cartTotal(){
+    return Object.entries(cart).reduce((s,[key,q])=>{
+      const {id} = parseCartKey(key);
+      const p = products.find(x=>x.id===id); return s + (p?p.effectivePrice*q:0);
+    },0);
+  }
+  function getDeliveryFee(subtotal){
+    const m = deliveryMethods.find(d=>d.key===selectedDelivery);
+    if(!m || !m.fee) return 0;
+    if(m.freeFrom && subtotal >= m.freeFrom) return 0;
+    return m.fee;
+  }
+
+  function renderOptionRow(containerId, list, selectedKey, onSelect){
+    const el = document.getElementById(containerId);
+    el.innerHTML = "";
+    list.forEach(opt=>{
+      const chip = document.createElement("button");
+      chip.className = "option-chip" + (opt.key===selectedKey ? " active" : "");
+      chip.textContent = opt[lang];
+      chip.addEventListener("click", ()=>{ onSelect(opt.key); renderCart(); });
+      el.appendChild(chip);
+    });
+  }
+
+  function getReferralCode(){
+    try{
+      let code = localStorage.getItem("fumoroom_ref_code");
+      if(!code){
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        let s = "";
+        for(let i=0;i<4;i++) s += chars[Math.floor(Math.random()*chars.length)];
+        code = "FUM-" + s;
+        localStorage.setItem("fumoroom_ref_code", code);
+      }
+      return code;
+    }catch(e){ return "FUM-0000"; }
+  }
+  function peekNextOrderSeq(){
+    try{ return parseInt(localStorage.getItem("fumoroom_order_seq")||"0",10) + 1; }
+    catch(e){ return 1; }
+  }
+  function commitNextOrderSeq(){
+    try{
+      const n = parseInt(localStorage.getItem("fumoroom_order_seq")||"0",10) + 1;
+      localStorage.setItem("fumoroom_order_seq", String(n));
+      return n;
+    }catch(e){ return 1; }
+  }
+  function getReferredByCode(){
+    try{ return localStorage.getItem("fumoroom_referred_by") || ""; }
+    catch(e){ return ""; }
+  }
+  function commitReferredBy(code){
+    try{
+      if(code && !localStorage.getItem("fumoroom_referred_by")){
+        localStorage.setItem("fumoroom_referred_by", code);
+      }
+    }catch(e){}
+  }
+
+  function renderCart(){
+    const count = cartCount();
+    const badge = document.getElementById("cartCount");
+    badge.textContent = count;
+    badge.style.display = count>0 ? "flex" : "none";
+
+    const itemsEl = document.getElementById("cartItems");
+    const entries = Object.entries(cart);
+
+    if(entries.length === 0){
+      itemsEl.innerHTML = `<div class="cart-empty">${t("cartEmpty")}</div>`;
+      document.getElementById("deliveryGroup").style.display = "none";
+      document.getElementById("paymentGroup").style.display = "none";
+      document.getElementById("cartTotal").style.display = "none";
+      document.getElementById("cartCheckout").style.display = "none";
+      return;
+    }
+
+    itemsEl.innerHTML = entries.map(([key,qty])=>{
+      const {id, color} = parseCartKey(key);
+      const p = products.find(x=>x.id===id);
+      if(!p) return "";
+      return `
+        <div class="cart-item">
+          <div class="ci-info">
+            <div class="ci-name">${p.name}${color ? ` — ${color}` : ""}</div>
+            <div class="ci-brand">${p.brand} · ${qty} шт</div>
+          </div>
+          <span class="ci-price">${p.effectivePrice*qty} zł</span>
+        </div>`;
+    }).join("");
+
+    document.getElementById("deliveryGroup").style.display = "block";
+    document.getElementById("paymentGroup").style.display = "block";
+    renderOptionRow("deliveryOptions", deliveryMethods, selectedDelivery, (k)=>{ selectedDelivery = k; });
+    renderOptionRow("paymentOptions", paymentMethods, selectedPayment, (k)=>{ selectedPayment = k; });
+
+    const subtotal = cartTotal();
+    const deliveryFee = getDeliveryFee(subtotal);
+    const total = subtotal + deliveryFee;
+    document.getElementById("cartTotal").style.display = "flex";
+    document.getElementById("cartSubtotalValue").textContent = subtotal + " zł";
+    document.getElementById("cartDeliveryFeeValue").textContent = deliveryFee === 0 ? t("freeLabel") : (deliveryFee + " zł");
+    document.getElementById("cartTotalValue").textContent = total + " zł";
+
+    const checkoutBtn = document.getElementById("cartCheckout");
+    checkoutBtn.style.display = "block";
+
+    const refInputVal = (document.getElementById("refCodeInput").value || "").trim();
+    const myCode = getReferralCode();
+    const referredByPreview = getReferredByCode() || refInputVal;
+    const deliveryFeeText = deliveryFee === 0 ? (lang==="ru"?"бесплатно":"безкоштовно") : `${deliveryFee} zł`;
+
+    function buildMessage(orderSeq, referredBy){
+      const orderNum = String(orderSeq).padStart(3, "0");
+      const refTagLine = referredBy
+        ? (lang === "ru" ? `\nКод покупателя: ${myCode}\nПригласил: ${referredBy}` : `\nКод покупця: ${myCode}\nЗапросив: ${referredBy}`)
+        : (lang === "ru" ? `\nКод покупателя: ${myCode}` : `\nКод покупця: ${myCode}`);
+      const lines = entries.map(([key,qty],i)=>{
+        const {id, color} = parseCartKey(key);
+        const p = products.find(x=>x.id===id);
+        return p ? `${i+1}. ${p.brand} — ${p.name}${color ? " — "+color : ""} ×${qty} — ${p.effectivePrice*qty} zł` : "";
+      });
+      const deliveryLabel = deliveryMethods.find(d=>d.key===selectedDelivery)[lang];
+      const paymentLabel = paymentMethods.find(x=>x.key===selectedPayment)[lang];
+      return lang === "ru"
+        ? `Новый заказ №${orderNum} — FUMOROOM\n\n${lines.join("\n")}\n\nТовары: ${subtotal} zł\nДоставка: ${deliveryFeeText}\nИтого: ${total} zł${refTagLine}\n\nСпособ получения: ${deliveryLabel}\nСпособ оплаты: ${paymentLabel}`
+        : `Нове замовлення №${orderNum} — FUMOROOM\n\n${lines.join("\n")}\n\nТовари: ${subtotal} zł\nДоставка: ${deliveryFeeText}\nРазом: ${total} zł${refTagLine}\n\nСпосіб отримання: ${deliveryLabel}\nСпосіб оплати: ${paymentLabel}`;
+    }
+
+    checkoutBtn.href = `${settings.telegramLink}?text=${encodeURIComponent(buildMessage(peekNextOrderSeq(), referredByPreview))}`;
+
+    checkoutBtn.onclick = function(){
+      commitReferredBy(refInputVal);
+      const finalSeq = commitNextOrderSeq();
+      const finalReferred = getReferredByCode() || refInputVal;
+      checkoutBtn.href = `${settings.telegramLink}?text=${encodeURIComponent(buildMessage(finalSeq, finalReferred))}`;
+    };
+  }
+
+  const cartOverlay = document.getElementById("cartOverlay");
+  const cartDrawer = document.getElementById("cartDrawer");
+  function openCart(){ cartOverlay.classList.add("open"); cartDrawer.classList.add("open"); }
+  function closeCart(){ cartOverlay.classList.remove("open"); cartDrawer.classList.remove("open"); }
+  document.getElementById("cartBtn").addEventListener("click", openCart);
+  document.getElementById("openCartBtn").addEventListener("click", openCart);
+  document.getElementById("cartClose").addEventListener("click", closeCart);
+  cartOverlay.addEventListener("click", closeCart);
+
+  const favOverlay = document.getElementById("favOverlay");
+  const favDrawer = document.getElementById("favDrawer");
+  function renderFavDrawer(){
+    let favs = [];
+    try{ favs = JSON.parse(localStorage.getItem("fumoroom_favorites")||"[]"); }catch(e){}
+    const items = products.filter(p=>favs.includes(p.id));
+    const el = document.getElementById("favItems");
+    if(items.length === 0){
+      el.innerHTML = `<div class="cart-empty">${t("favEmpty")}</div>`;
+      return;
+    }
+    el.innerHTML = items.map(p=>{
+      const hasDiscount = p.effectivePrice !== p.price;
+      const priceHtml = hasDiscount
+        ? `<span class="fr-price"><s style="color:var(--mute);font-weight:400;">${p.price} zł</s> ${p.effectivePrice} zł</span>`
+        : `<span class="fr-price">${p.effectivePrice} zł</span>`;
+      return `
+      <div class="flavor-row${p.status === "out" ? " out" : (p.status === "low" ? " low" : "")}" style="padding:11px 0;">
+        <div class="fr-info">
+          <div class="fr-name">${p.brand} — ${p.name}${p.bestseller ? `<span class="badge-hit">${t("bestsellerLabel")}</span>` : ""}</div>
+          <div class="fr-meta">${p.status === "out" ? t("outStock") : (p.status === "low" ? t("lowStock") : t("inStock"))}</div>
+        </div>
+        ${priceHtml}
+        <button class="heart-btn active" data-fav="${p.id}">♥</button>
+        ${qtyControlHTML(p)}
+      </div>
+    `;}).join("");
+    el.querySelectorAll("[data-fav]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        toggleFavorite(btn.getAttribute("data-fav"));
+        renderFavDrawer(); renderBrandList();
+      });
+    });
+    el.querySelectorAll("[data-add]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const id = btn.getAttribute("data-add");
+        cart[id] = (cart[id]||0)+1;
+        renderFavDrawer(); renderCart();
+      });
+    });
+    el.querySelectorAll("[data-sub]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const id = btn.getAttribute("data-sub");
+        if(cart[id]){ cart[id]--; if(cart[id]<=0) delete cart[id]; }
+        renderFavDrawer(); renderCart();
+      });
+    });
+  }
+  function openFav(){ renderFavDrawer(); favOverlay.classList.add("open"); favDrawer.classList.add("open"); }
+  function closeFav(){ favOverlay.classList.remove("open"); favDrawer.classList.remove("open"); }
+  document.getElementById("favBtn").addEventListener("click", openFav);
+  document.getElementById("favClose").addEventListener("click", closeFav);
+  favOverlay.addEventListener("click", closeFav);
+  updateFavCount();
+
+  const refOverlay = document.getElementById("refOverlay");
+  const refDrawer = document.getElementById("refDrawer");
+  function openRef(){
+    document.getElementById("refCode").textContent = getReferralCode();
+    document.getElementById("refCopyStatus").textContent = "";
+    refOverlay.classList.add("open");
+    refDrawer.classList.add("open");
+  }
+  function closeRef(){ refOverlay.classList.remove("open"); refDrawer.classList.remove("open"); }
+  document.getElementById("refBtn").addEventListener("click", openRef);
+  document.getElementById("refClose").addEventListener("click", closeRef);
+  refOverlay.addEventListener("click", closeRef);
+
+  document.getElementById("refCopy").addEventListener("click", async ()=>{
+    const code = getReferralCode();
+    const status = document.getElementById("refCopyStatus");
+    try{ await navigator.clipboard.writeText(code); status.textContent = t("refCopied"); }
+    catch(e){ status.textContent = code; }
+    setTimeout(()=>{ status.textContent = ""; }, 2500);
+  });
+  document.getElementById("refShare").addEventListener("click", ()=>{
+    const code = getReferralCode();
+    const shareText = `${t("refShareText")} ${code}: ${settings.telegramLink}`;
+    if(navigator.share){ navigator.share({text: shareText}).catch(()=>{}); }
+    else {
+      const url = `https://t.me/share/url?url=${encodeURIComponent(settings.telegramLink)}&text=${encodeURIComponent(shareText)}`;
+      window.open(url, "_blank");
+    }
+  });
+
+  const gate = document.getElementById("gate");
+  const gateCard = document.getElementById("gateCard");
+  const blockedMsg = document.getElementById("blockedMsg");
+  document.getElementById("gateYes").addEventListener("click", ()=>{
+    try{ sessionStorage.setItem("age_ok","1"); }catch(e){}
+    gate.classList.add("hidden");
+    setTimeout(()=> gate.style.display = "none", 350);
+  });
+  document.getElementById("gateNo").addEventListener("click", ()=>{
+    gateCard.querySelector(".gate-actions").style.display = "none";
+    gateCard.querySelector("p").style.display = "none";
+    blockedMsg.style.display = "block";
+  });
+  try{ if(sessionStorage.getItem("age_ok")==="1"){ gate.style.display = "none"; } }catch(e){}
+
+  document.getElementById("reviewsLink").addEventListener("click",(e)=>{
+    e.preventDefault();
+    alert(lang==="ru" ? "Здесь будет ссылка на отзывы (канал/чат)." : "Тут буде посилання на відгуки (канал/чат).");
+  });
+
+  boot();
+})();
+</script>
+
+</body>
+</html>
