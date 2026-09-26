@@ -520,6 +520,8 @@
     </div>
   </div>
   <a class="cart-checkout" id="cartCheckout" href="#" target="_blank" rel="noopener" style="display:none;" data-i18n="cartCheckout">Отправить заказ в Telegram</a>
+  <button class="btn btn-ghost" id="cartCopy" style="display:none;width:100%;margin-top:8px;" data-i18n="cartCopy">Скопировать заказ</button>
+  <div class="ref-copy-status" id="cartCopyStatus"></div>
 </div>
 
 <div class="drawer-overlay" id="refOverlay"></div>
@@ -592,7 +594,7 @@
       bestsellerLabel:"Хит",
       favHead:"Избранное", favEmpty:"Пока ничего не добавлено",
       empty:"Ничего не найдено в этой категории",
-      cartHead:"Заказ", cartTotalLabel:"Итого", cartCheckout:"Отправить заказ в Telegram",
+      cartHead:"Заказ", cartTotalLabel:"Итого", cartCheckout:"Отправить заказ в Telegram", cartCopy:"Скопировать заказ", cartCopied:"Скопировано!",
       cartEmpty:"Пока пусто", deliveryLabel:"Способ получения", paymentLabel:"Способ оплаты",
       subtotalLabel:"Товары", deliveryFeeLabel:"Доставка", freeLabel:"Бесплатно",
       searchPh:"Поиск по названию…", chooseColor:"Выберите цвет",
@@ -617,7 +619,7 @@
       bestsellerLabel:"Хіт",
       favHead:"Обране", favEmpty:"Поки нічого не додано",
       empty:"Нічого не знайдено в цій категорії",
-      cartHead:"Замовлення", cartTotalLabel:"Разом", cartCheckout:"Надіслати замовлення в Telegram",
+      cartHead:"Замовлення", cartTotalLabel:"Разом", cartCheckout:"Надіслати замовлення в Telegram", cartCopy:"Скопіювати замовлення", cartCopied:"Скопійовано!",
       cartEmpty:"Поки порожньо", deliveryLabel:"Спосіб отримання", paymentLabel:"Спосіб оплати",
       subtotalLabel:"Товари", deliveryFeeLabel:"Доставка", freeLabel:"Безкоштовно",
       searchPh:"Пошук за назвою…", chooseColor:"Оберіть колір",
@@ -855,6 +857,9 @@
       const priceLabel = uniformPrice !== null ? `${uniformPrice} zł` : `от ${Math.min(...prices)} zł`;
       const meta = items[0].mg ? `${items[0].mg}mg · ${items[0].ml}ml` : "";
 
+      const statusOrder = {in:0, low:1, out:2};
+      const sortedItems = items.slice().sort((a,b)=> (statusOrder[a.status]??1) - (statusOrder[b.status]??1));
+
       const item = document.createElement("div");
       item.className = "brand-item" + (isOpen ? " open" : "");
       item.innerHTML = `
@@ -871,7 +876,7 @@
           </div>
         </div>
         <div class="brand-body">
-          ${items.map(p=>{
+          ${sortedItems.map(p=>{
             const hasDiscount = p.effectivePrice !== p.price;
             const priceHtml = hasDiscount
               ? `<span class="fr-price"><s style="color:var(--mute);font-weight:400;">${p.price} zł</s> ${p.effectivePrice} zł</span>`
@@ -1015,6 +1020,7 @@
       document.getElementById("paymentGroup").style.display = "none";
       document.getElementById("cartTotal").style.display = "none";
       document.getElementById("cartCheckout").style.display = "none";
+      document.getElementById("cartCopy").style.display = "none";
       return;
     }
 
@@ -1047,6 +1053,8 @@
 
     const checkoutBtn = document.getElementById("cartCheckout");
     checkoutBtn.style.display = "block";
+    const copyBtn = document.getElementById("cartCopy");
+    copyBtn.style.display = "block";
 
     const refInputVal = (document.getElementById("refCodeInput").value || "").trim();
     const myCode = getReferralCode();
@@ -1077,6 +1085,18 @@
       const finalSeq = commitNextOrderSeq();
       const finalReferred = getReferredByCode() || refInputVal;
       checkoutBtn.href = `${settings.telegramLink}?text=${encodeURIComponent(buildMessage(finalSeq, finalReferred))}`;
+    };
+
+    copyBtn.onclick = async function(){
+      const statusEl = document.getElementById("cartCopyStatus");
+      const msg = buildMessage(peekNextOrderSeq(), referredByPreview);
+      try{
+        await navigator.clipboard.writeText(msg);
+        statusEl.textContent = t("cartCopied");
+      }catch(e){
+        statusEl.textContent = msg;
+      }
+      setTimeout(()=>{ statusEl.textContent = ""; }, 2500);
     };
   }
 
