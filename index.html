@@ -864,7 +864,7 @@
       item.className = "brand-item" + (isOpen ? " open" : "");
       item.innerHTML = `
         <div class="brand-header">
-          <div class="bh-thumb"></div>
+          ${items[0].image ? `<img class="bh-thumb" src="${items[0].image}" alt="" style="object-fit:cover;" onerror="this.outerHTML='<div class=&quot;bh-thumb&quot;></div>'">` : `<div class="bh-thumb"></div>`}
           <div class="bh-left">
             <span class="bh-name">${brand}</span>
             ${meta ? `<span class="bh-meta">${meta}</span>` : ""}
