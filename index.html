@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>FUMOROOM — наличие в реальном времени</title>
+<link rel="icon" href="/images/favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -561,6 +562,32 @@
   // сервера (см. файл api/status.js и переменную окружения FUMOROOM_API_URL в Vercel).
   const API_URL = "/api/status";
 
+  // ============================================================
+  //  ФОТО БРЕНДОВ — добавляйте/меняйте строки прямо здесь.
+  //  Формат:   "Название бренда": "/images/имя-файла.jpg",
+  //  Название бренда — точно как в админке. Регистр букв в имени
+  //  файла должен совпадать с файлом в папке images на GitHub.
+  //  Пустая строка "" = показывается пунктирная заглушка.
+  // ============================================================
+  const BRAND_IMAGES = {
+    "Chaser Lux":          "",
+    "Chaser Black":        "/images/chaserBL.jpg",
+    "Elfliq":              "",
+    "Vozol":               "",
+    "Puffy":               "",
+    "Vaporesso":           "",
+    "OXVA":                "",
+    "Картриджи Vaporesso": "",
+    "Картриджи OXVA":      ""
+  };
+  function brandImage(brand, fromApi){
+    const key = String(brand).trim().toLowerCase();
+    for(const k in BRAND_IMAGES){
+      if(k.trim().toLowerCase() === key && BRAND_IMAGES[k]) return BRAND_IMAGES[k];
+    }
+    return fromApi || "";
+  }
+
   const categories = [
     {key:"all", ru:"Всё", ua:"Все"},
     {key:"disposables", ru:"Одноразки", ua:"Одноразки"},
@@ -864,7 +891,7 @@
       item.className = "brand-item" + (isOpen ? " open" : "");
       item.innerHTML = `
         <div class="brand-header">
-          ${items[0].image ? `<img class="bh-thumb" src="${items[0].image}" alt="" style="object-fit:cover;" onerror="this.outerHTML='<div class=&quot;bh-thumb&quot;></div>'">` : `<div class="bh-thumb"></div>`}
+          ${brandImage(brand, items[0].image) ? `<img class="bh-thumb" src="${brandImage(brand, items[0].image)}" alt="" style="object-fit:cover;" onerror="this.outerHTML='<div class=&quot;bh-thumb&quot;></div>'">` : `<div class="bh-thumb"></div>`}
           <div class="bh-left">
             <span class="bh-name">${brand}</span>
             ${meta ? `<span class="bh-meta">${meta}</span>` : ""}
