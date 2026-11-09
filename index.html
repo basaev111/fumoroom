@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <title>FUMOROOM — наличие в реальном времени</title>
-<link rel="icon" type="image/png" href="/images/logo.jpg">
 <link rel="icon" href="/images/favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -199,7 +198,7 @@
   .bh-chevron{font-family:'Manrope',sans-serif;color:var(--violet);font-size:0.85rem;transition:transform .2s ease;}
   .brand-item.open .bh-chevron{transform:rotate(90deg);}
   .brand-body{max-height:0;overflow:hidden;transition:max-height .3s ease;}
-  .brand-item.open .brand-body{max-height:1600px;border-top:1px solid var(--border);}
+  .brand-item.open .brand-body{max-height:none;border-top:1px solid var(--border);}
   .flavor-row{display:flex;align-items:center;gap:10px;padding:11px 14px;}
   .flavor-row + .flavor-row{border-top:1px dashed var(--border);}
   .flavor-row.out{opacity:0.55;}
@@ -561,32 +560,36 @@
   // Адрес Apps Script теперь НЕ хранится здесь — сайт обращается к своей же
   // serverless-функции /api/status, которая сама дёргает Apps Script со стороны
   // сервера (см. файл api/status.js и переменную окружения FUMOROOM_API_URL в Vercel).
-  const API_URL = "/api/status";
+  const API_URL = "/api/stock"; // наличие из PodControl (запасной вариант: "/api/status")
 
   // ============================================================
   //  ФОТО БРЕНДОВ — добавляйте/меняйте строки прямо здесь.
   //  Формат:   "Название бренда": "/images/имя-файла.jpg",
-  //  Название бренда — точно как в админке. Регистр букв в имени
-  //  файла должен совпадать с файлом в папке images на GitHub.
-  //  Пустая строка "" = показывается пунктирная заглушка.
+  //  Название бренда — как в PodControl (регистр и пробелы не важны).
+  //  Фото лежат в папке images. Если бренда нет в списке, сайт сам ищет
+  //  /images/<название-бренда>.jpg: маленькие буквы, пробелы → дефис
+  //  (Chaser Black → chaser-black.jpg). Нет файла — пунктирная заглушка.
   // ============================================================
   const BRAND_IMAGES = {
     "Chaser Lux":          "/images/chaserLUX.jpg",
     "Chaser Black":        "/images/chaserBL.jpg",
     "Elfliq":              "/images/elfliq.jpg",
     "Vozol":               "/images/vozol.jpg",
-    "Puffy":               "/images/",
+    "Puffy":               "",
     "Vaporesso":           "/images/xros6.jpg",
-    "OXVA":                "/images/",
-    "Картриджи Vaporesso": "/images/",
-    "Картриджи OXVA":      "/images/"
+    "OXVA":                "",
+    "Картриджи Vaporesso": "",
+    "Картриджи OXVA":      ""
   };
   function brandImage(brand, fromApi){
-    const key = String(brand).trim().toLowerCase();
+    const nk = x => String(x).toLowerCase().replace(/[ \t ]+/g,"");
+    const key = nk(brand);
     for(const k in BRAND_IMAGES){
-      if(k.trim().toLowerCase() === key && BRAND_IMAGES[k]) return BRAND_IMAGES[k];
+      if(nk(k) === key && BRAND_IMAGES[k]) return BRAND_IMAGES[k];
     }
-    return fromApi || "";
+    if (fromApi) return fromApi;
+    const slug = String(brand).trim().toLowerCase().replace(/\s+/g,"-");
+    return slug ? "/images/" + encodeURIComponent(slug) + ".jpg" : "";
   }
 
   const categories = [
@@ -693,10 +696,24 @@
       document.getElementById("mainWrap").style.display = "block";
       document.getElementById("stickyCta").style.display = "flex";
       applyLang();
+      setInterval(refreshStock, 60000);
     }catch(e){
       document.getElementById("loadingText").textContent =
         "Не удалось загрузить наличие. Обновите страницу или напишите нам в Telegram.";
     }
+  }
+
+  // тихое обновление наличия раз в минуту, без перезагрузки страницы
+  async function refreshStock(){
+    if(document.hidden) return;
+    try{
+      const res = await fetch(API_URL);
+      const json = await res.json();
+      if(!json.ok || !json.data || !json.data.products) return;
+      products = json.data.products;
+      settings = json.data.settings || settings;
+      renderBrandList(); renderCart();
+    }catch(e){}
   }
 
   function applyLang(){
@@ -840,6 +857,9 @@
     return `<div class="pod-color-wrap">${pickerHtml}${addedHtml}</div>`;
   }
 
+  function hasPrice(v){ return typeof v === "number" && isFinite(v) && v > 0; }
+  function minPrice(list){ const a = list.map(p=>p.effectivePrice).filter(hasPrice); return a.length ? Math.min(...a) : 0; }
+
   function renderBrandList(){
     const el = document.getElementById("brandList");
     el.innerHTML = "";
@@ -870,8 +890,8 @@
         const vb = Math.min(...byBrand[b].map(p=>p.mg||0));
         return sortDir * (va - vb);
       }
-      const va = Math.min(...byBrand[a].map(p=>p.effectivePrice));
-      const vb = Math.min(...byBrand[b].map(p=>p.effectivePrice));
+      const va = minPrice(byBrand[a]);
+      const vb = minPrice(byBrand[b]);
       return sortDir * (va - vb);
     });
 
@@ -880,10 +900,10 @@
     brandKeys.forEach(brand=>{
       const items = byBrand[brand];
       const isOpen = forceOpen || expanded.has(brand);
-      const prices = items.map(p=>p.effectivePrice);
-      const uniformPrice = prices.every(p=>p===prices[0]) ? prices[0] : null;
-      const priceLabel = uniformPrice !== null ? `${uniformPrice} zł` : `от ${Math.min(...prices)} zł`;
-      const meta = items[0].mg ? `${items[0].mg}mg · ${items[0].ml}ml` : "";
+      const prices = items.map(p=>p.effectivePrice).filter(hasPrice);
+      const uniformPrice = prices.length && prices.length === items.length && prices.every(p=>p===prices[0]) ? prices[0] : null;
+      const priceLabel = !prices.length ? "" : (uniformPrice !== null ? `${uniformPrice} zł` : `от ${Math.min(...prices)} zł`);
+      const meta = items[0].mg ? `${items[0].mg}mg${items[0].ml ? ` · ${items[0].ml}ml` : ""}` : "";
 
       const statusOrder = {in:0, low:1, out:2};
       const sortedItems = items.slice().sort((a,b)=> (statusOrder[a.status]??1) - (statusOrder[b.status]??1));
@@ -906,7 +926,7 @@
         <div class="brand-body">
           ${sortedItems.map(p=>{
             const hasDiscount = p.effectivePrice !== p.price;
-            const priceHtml = hasDiscount
+            const priceHtml = !hasPrice(p.effectivePrice) ? "" : hasDiscount
               ? `<span class="fr-price"><s style="color:var(--mute);font-weight:400;">${p.price} zł</s> ${p.effectivePrice} zł</span>`
               : `<span class="fr-price">${p.effectivePrice} zł</span>`;
             return `
@@ -975,7 +995,7 @@
   function cartTotal(){
     return Object.entries(cart).reduce((s,[key,q])=>{
       const {id} = parseCartKey(key);
-      const p = products.find(x=>x.id===id); return s + (p?p.effectivePrice*q:0);
+      const p = products.find(x=>x.id===id); return s + (p&&hasPrice(p.effectivePrice)?p.effectivePrice*q:0);
     },0);
   }
   function getDeliveryFee(subtotal){
@@ -1062,7 +1082,7 @@
             <div class="ci-name">${p.name}${color ? ` — ${color}` : ""}</div>
             <div class="ci-brand">${p.brand} · ${qty} шт</div>
           </div>
-          <span class="ci-price">${p.effectivePrice*qty} zł</span>
+          <span class="ci-price">${hasPrice(p.effectivePrice) ? p.effectivePrice*qty+" zł" : ""}</span>
         </div>`;
     }).join("");
 
@@ -1097,7 +1117,7 @@
       const lines = entries.map(([key,qty],i)=>{
         const {id, color} = parseCartKey(key);
         const p = products.find(x=>x.id===id);
-        return p ? `${i+1}. ${p.brand} — ${p.name}${color ? " — "+color : ""} ×${qty} — ${p.effectivePrice*qty} zł` : "";
+        return p ? `${i+1}. ${p.brand} — ${p.name}${color ? " — "+color : ""} ×${qty} ${hasPrice(p.effectivePrice) ? "— "+p.effectivePrice*qty+" zł" : ""}` : "";
       });
       const deliveryLabel = deliveryMethods.find(d=>d.key===selectedDelivery)[lang];
       const paymentLabel = paymentMethods.find(x=>x.key===selectedPayment)[lang];
@@ -1150,7 +1170,7 @@
     }
     el.innerHTML = items.map(p=>{
       const hasDiscount = p.effectivePrice !== p.price;
-      const priceHtml = hasDiscount
+      const priceHtml = !hasPrice(p.effectivePrice) ? "" : hasDiscount
         ? `<span class="fr-price"><s style="color:var(--mute);font-weight:400;">${p.price} zł</s> ${p.effectivePrice} zł</span>`
         : `<span class="fr-price">${p.effectivePrice} zł</span>`;
       return `
